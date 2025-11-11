@@ -34,6 +34,15 @@ async function run() {
       res.send(result);
     });
 
+       app.post("/crops", async (req, res) => {
+         const newCrops = req.body;
+         console.log(newCrops);
+         const result = await modelsCollection.insertOne(newCrops);
+         res.send({
+           success: true,
+           result,
+         });
+       });
       
        // latest data
     app.get("/latest-crops", async (req, res) => {
