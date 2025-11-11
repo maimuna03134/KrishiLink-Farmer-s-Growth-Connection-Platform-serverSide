@@ -43,6 +43,23 @@ async function run() {
            result,
          });
        });
+
+
+      app.put("/crops/:id", async (req, res) => {
+        const { id } = req.params;
+        const updatedCrops = req.body;
+        const query = { _id: new ObjectId(id) };
+
+        const update = {
+          $set: updatedCrops,
+        };
+        const result = await cropsCollection.updateOne(query, update);
+
+        res.send({
+          success: true,
+          result,
+        });
+      });
       
        // latest data
     app.get("/latest-crops", async (req, res) => {
