@@ -86,7 +86,7 @@ async function run() {
         });
       }
     });
-    // put - interest status
+    // put - update interest status
     app.put("/crops/:id", async (req, res) => {
       const { cropId, interestId } = req.params;
       const { status } = res.body;
@@ -117,9 +117,26 @@ async function run() {
       }
     });
 
+    // put - update entire crop
+     app.put("/crops/:id", async (req, res) => {
+       const { id } = req.params;
+       const updatedCrops = req.body;
+       const query = { _id: id };
+
+       const update = {
+         $set: updatedCrops,
+       };
+       const result = await cropsCollection.updateOne(query, update);
+
+       res.send({
+         success: true,
+         result,
+       });
+     });
+
     app.delete("/crops/:id", async (req, res) => {
       const { id } = req.params;
-      const query = { _id: new ObjectId(id) };
+      const query = { _id: id };
       const result = await cropsCollection.deleteOne(query);
       res.send({
         success: true,
