@@ -28,51 +28,101 @@ async function run() {
     const cropsCollection = db.collection("crops");
 
     app.get("/crops", async (req, res) => {
-      const result = await cropsCollection.find().toArray();
+      try {
+        const result = await cropsCollection.find().toArray();
       res.send(result);
+      } catch (err){
+        res.status(500).send({ success: false, message: err.message });
+      }
     });
 
     // for single data
     app.get("/crops/:id", async (req, res) => {
-      const { id } = req.params;
-      console.log(id);
-      const query = { _id: id };
-      const result = await cropsCollection.findOne(query);
-      res.send({
-        success: true,
-        result,
-      });
+      try {
+        const { id } = req.params;
+        console.log(id);
+        const query = { _id: id };
+        const result = await cropsCollection.findOne(query);
+
+        if (!result) {
+          return res.status(404).send({
+            success: false,
+            message: "Crop not found",
+          });
+        }
+
+        res.send({
+          success: true,
+          result,
+        });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+      
+    });
+
+    // add crops
+    app.post("/add-crop", async (req, res) => {
+      try {
+        console.log("Adding crop:", req.body);
+
+        const newCrop = req.body;
+
+
+        const result = await cropsCollection.insertOne(newCrop);
+
+        console.log("Crop added successfully:", result);
+
+        res.send({
+          success: true,
+          message: "Crop added successfully",
+          result,
+        });
+      } catch (error) {
+        console.error("Error adding crop:", error);
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
 
     // post - new interest
-    app.post("/crops", async (req, res) => {
-      const newInterest = req.body;
-      // console.log(newInterest);
-      const { cropId, userEmail, userName, quantity, message, status } =
-        newInterest;
+    app.post("/crops/:cropId/interests", async (req, res) => {
+      const { cropId } = req.params;
+      const { userEmail, userName, quantity, message } = req.body;
 
       try {
+        const interestObj = {
+          _id: new ObjectId().toString(),
+          cropId,
+          userEmail,
+          userName,
+          quantity: parseInt(quantity),
+          message,
+          status: "pending",
+        };
+
+        console.log("Adding interest:", interestObj);
+
+
         const result = await cropsCollection.updateOne(
           { _id: cropId },
           {
             $push: {
-              interests: {
-                _id: new ObjectId(),
-                cropId,
-                userEmail,
-                userName,
-                quantity,
-                message,
-                status: status || "pending",
-              },
+              interests: interestObj,
             },
           }
         );
-        if (result.modifiedCount === 0) {
-          return res.status(404).send({
-            success: false,
-            message: "Crop not Found",
-          });
+
+        console.log("Update result:", result);
+
+
+        if (result.matchedCount === 0) {
+         return res.status(404).send({
+           success: false,
+           message: "Crop not found",
+         });
         }
         res.send({
           success: true,
@@ -86,27 +136,43 @@ async function run() {
         });
       }
     });
+
+
     // put - update interest status
-    app.put("/crops/:id", async (req, res) => {
+    app.put("/crops/:cropId/interests/:interestId", async (req, res) => {
       const { cropId, interestId } = req.params;
       const { status } = res.body;
 
       try {
+        console.log("Updating interest:", { cropId, interestId, status });
+
         const result = await cropsCollection.updateOne(
-          { _id: cropId, "interests._id": new ObjectId(interestId) },
+          { _id: cropId, "interests._id": interestId },
           {
             $set: { "interests.$status": status },
           }
         );
+
+        console.log("Update result:", result);
+
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: "Interest not found",
+          });
+        }
+
         if (result.modifiedCount === 0) {
           return res.status(404).send({
             success: false,
-            message: "Interest not Found",
+            message: "No changes made",
           });
         }
+
         res.send({
           success: true,
-          message: "Interest updated successfully",
+          message: "Interest updated successfully!",
           result,
         });
       } catch (err) {
@@ -118,37 +184,55 @@ async function run() {
     });
 
     // put - update entire crop
-     app.put("/crops/:id", async (req, res) => {
-       const { id } = req.params;
-       const updatedCrops = req.body;
-       const query = { _id: id };
+    app.put("/crops/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updatedCrops = req.body;
+        const query = { _id: id };
 
-       const update = {
-         $set: updatedCrops,
-       };
-       const result = await cropsCollection.updateOne(query, update);
+        const update = {
+          $set: updatedCrops,
+        };
+        const result = await cropsCollection.updateOne(query, update);
 
-       res.send({
-         success: true,
-         result,
-       });
+        res.send({
+          success: true,
+          result,
+        });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+       
      });
 
     app.delete("/crops/:id", async (req, res) => {
-      const { id } = req.params;
-      const query = { _id: id };
-      const result = await cropsCollection.deleteOne(query);
-      res.send({
-        success: true,
-        result,
-      });
+      try {
+        const { id } = req.params;
+        const query = { _id: id };
+        const result = await cropsCollection.deleteOne(query);
+        res.send({
+          success: true,
+          result,
+        });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+      
     });
 
     // latest data
     app.get("/latest-crops", async (req, res) => {
-      const cursor = cropsCollection.find().sort({ pricePerUnit: -1 }).limit(6);
-      const result = await cursor.toArray();
-      res.send(result);
+      try {
+        const cursor = cropsCollection
+          .find()
+          .sort({ pricePerUnit: -1 })
+          .limit(6);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+      
     });
 
     await client.db("admin").command({ ping: 1 });
