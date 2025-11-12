@@ -27,7 +27,6 @@ async function run() {
     const db = client.db("crops-db");
     const cropsCollection = db.collection("crops");
 
-
     app.get("/crops", async (req, res) => {
       const result = await cropsCollection.find().toArray();
       res.send(result);
@@ -45,12 +44,13 @@ async function run() {
       });
     });
 
+    // post - new interest
     app.post("/crops", async (req, res) => {
       const newInterest = req.body;
       // console.log(newInterest);
       const { cropId, userEmail, userName, quantity, message, status } =
         newInterest;
-      
+
       try {
         const result = await cropsCollection.updateOne(
           { _id: cropId },
@@ -71,7 +71,7 @@ async function run() {
         if (result.modifiedCount === 0) {
           return res.status(404).send({
             success: false,
-            message: 'Crop not Found',
+            message: "Crop not Found",
           });
         }
         res.send({
@@ -86,21 +86,35 @@ async function run() {
         });
       }
     });
-
+    // put - interest status
     app.put("/crops/:id", async (req, res) => {
-      const { id } = req.params;
-      const updatedCrops = req.body;
-      const query = { _id: new ObjectId(id) };
+      const { cropId, interestId } = req.params;
+      const { status } = res.body;
 
-      const update = {
-        $set: updatedCrops,
-      };
-      const result = await cropsCollection.updateOne(query, update);
-
-      res.send({
-        success: true,
-        result,
-      });
+      try {
+        const result = await cropsCollection.updateOne(
+          { _id: cropId, "interests._id": new ObjectId(interestId) },
+          {
+            $set: { "interests.$status": status },
+          }
+        );
+        if (result.modifiedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: "Interest not Found",
+          });
+        }
+        res.send({
+          success: true,
+          message: "Interest updated successfully",
+          result,
+        });
+      } catch (err) {
+        res.status(500).send({
+          success: false,
+          message: err.message,
+        });
+      }
     });
 
     app.delete("/crops/:id", async (req, res) => {
