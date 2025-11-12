@@ -27,6 +27,7 @@ async function run() {
     const db = client.db("crops-db");
     const cropsCollection = db.collection("crops");
 
+
     app.get("/crops", async (req, res) => {
       const result = await cropsCollection.find().toArray();
       res.send(result);
@@ -45,13 +46,45 @@ async function run() {
     });
 
     app.post("/crops", async (req, res) => {
-      const newCrops = req.body;
-      console.log(newCrops);
-      const result = await modelsCollection.insertOne(newCrops);
-      res.send({
-        success: true,
-        result,
-      });
+      const newInterest = req.body;
+      // console.log(newInterest);
+      const { cropId, userEmail, userName, quantity, message, status } =
+        newInterest;
+      
+      try {
+        const result = await cropsCollection.updateOne(
+          { _id: cropId },
+          {
+            $push: {
+              interests: {
+                _id: new ObjectId(),
+                cropId,
+                userEmail,
+                userName,
+                quantity,
+                message,
+                status: status || "pending",
+              },
+            },
+          }
+        );
+        if (result.modifiedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: 'Crop not Found',
+          });
+        }
+        res.send({
+          success: true,
+          message: "Interest added successfully",
+          result,
+        });
+      } catch (err) {
+        res.status(500).send({
+          success: false,
+          message: err.message,
+        });
+      }
     });
 
     app.put("/crops/:id", async (req, res) => {
