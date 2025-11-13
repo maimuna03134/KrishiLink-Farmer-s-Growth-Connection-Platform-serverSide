@@ -30,8 +30,8 @@ async function run() {
     app.get("/crops", async (req, res) => {
       try {
         const result = await cropsCollection.find().toArray();
-      res.send(result);
-      } catch (err){
+        res.send(result);
+      } catch (err) {
         res.status(500).send({ success: false, message: err.message });
       }
     });
@@ -58,8 +58,83 @@ async function run() {
       } catch (error) {
         res.status(500).send({ success: false, message: error.message });
       }
-      
     });
+
+    // latest data
+    app.get("/latest-crops", async (req, res) => {
+      try {
+        const cursor = cropsCollection.find().sort({ _id: -1 }).limit(6);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+    });
+
+   // get- for my post- crops by owner email
+    app.get("/my-crops/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+
+        const result = await cropsCollection
+          .find({ "owner.ownerEmail": email })
+          .toArray();
+
+        res.send({
+          success: true,
+          result,
+        });
+      } catch (err) {
+        console.error("Error fetching my crops:", err);
+        res.status(500).send({
+          success: false,
+          message: err.message,
+        });
+      }
+    });
+
+
+ //get- for myInterest- interests by user email
+    app.get("/my-interests/:email", async (req, res) => {
+      try {
+        const { email } = req.params;
+
+        const allCrops = await cropsCollection.find().toArray();
+
+        const myInterests = [];
+
+        allCrops.forEach((crop) => {
+          if (crop.interests && crop.interests.length > 0) {
+            crop.interests.forEach((interest) => {
+              if (interest.userEmail === email) {
+                myInterests.push({
+                  ...interest,
+                  cropId: crop._id,
+                  cropName: crop.name,
+                  cropImage: crop.image,
+                  ownerName: crop.owner.ownerName,
+                  ownerEmail: crop.owner.ownerEmail,
+                  ownerEmail: crop.owner.ownerEmail,
+                  unit: crop.unit,
+                });
+              }
+            });
+          }
+        });
+
+        res.send({
+          success: true,
+          result: myInterests,
+        });
+      } catch (err) {
+        console.error("Error fetching my interests:", err);
+        res.status(500).send({
+          success: false,
+          message: err.message,
+        });
+      }
+    });
+
 
     // add crops
     app.post("/add-crop", async (req, res) => {
@@ -68,24 +143,22 @@ async function run() {
 
         const newCrop = req.body;
 
-
         const result = await cropsCollection.insertOne(newCrop);
-
-        console.log("Crop added successfully:", result);
 
         res.send({
           success: true,
           message: "Crop added successfully",
           result,
         });
-      } catch (error) {
-        console.error("Error adding crop:", error);
+      } catch (err) {
+        console.error("Error adding crop:", err);
         res.status(500).send({
           success: false,
-          message: error.message,
+          message: err.message,
         });
       }
     });
+
 
     // post - new interest
     app.post("/crops/:cropId/interests", async (req, res) => {
@@ -103,9 +176,6 @@ async function run() {
           status: "pending",
         };
 
-        console.log("Adding interest:", interestObj);
-
-
         const result = await cropsCollection.updateOne(
           { _id: cropId },
           {
@@ -115,14 +185,11 @@ async function run() {
           }
         );
 
-        console.log("Update result:", result);
-
-
         if (result.matchedCount === 0) {
-         return res.status(404).send({
-           success: false,
-           message: "Crop not found",
-         });
+          return res.status(404).send({
+            success: false,
+            message: "Crop not found",
+          });
         }
         res.send({
           success: true,
@@ -141,20 +208,22 @@ async function run() {
     // put - update interest status
     app.put("/crops/:cropId/interests/:interestId", async (req, res) => {
       const { cropId, interestId } = req.params;
-      const { status } = res.body;
+      const { status } = req.body;
 
       try {
         console.log("Updating interest:", { cropId, interestId, status });
 
         const result = await cropsCollection.updateOne(
-          { _id: cropId, "interests._id": interestId },
           {
-            $set: { "interests.$status": status },
+            _id: cropId, // ✅ string id
+            "interests._id": interestId, // ✅ string id
+          },
+          {
+            $set: { "interests.$.status": status },
           }
         );
 
         console.log("Update result:", result);
-
 
         if (result.matchedCount === 0) {
           return res.status(404).send({
@@ -176,12 +245,14 @@ async function run() {
           result,
         });
       } catch (err) {
+        console.error("Error while updating interest:", err);
         res.status(500).send({
           success: false,
           message: err.message,
         });
       }
     });
+
 
     // put - update entire crop
     app.put("/crops/:id", async (req, res) => {
@@ -202,8 +273,7 @@ async function run() {
       } catch (error) {
         res.status(500).send({ success: false, message: error.message });
       }
-       
-     });
+    });
 
     app.delete("/crops/:id", async (req, res) => {
       try {
@@ -217,22 +287,6 @@ async function run() {
       } catch (error) {
         res.status(500).send({ success: false, message: error.message });
       }
-      
-    });
-
-    // latest data
-    app.get("/latest-crops", async (req, res) => {
-      try {
-        const cursor = cropsCollection
-          .find()
-          .sort({ pricePerUnit: -1 })
-          .limit(6);
-        const result = await cursor.toArray();
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ success: false, message: error.message });
-      }
-      
     });
 
     await client.db("admin").command({ ping: 1 });
