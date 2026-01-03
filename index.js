@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -8,8 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 // mongodb
-const uri =
-  "mongodb+srv://crops-db:zu5mEPXxBTYpD8tZ@cluster0.imnpg23.mongodb.net/?appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.imnpg23.mongodb.net/?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -22,15 +22,68 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("crops-db");
     const cropsCollection = db.collection("crops");
 
     app.get("/crops", async (req, res) => {
       try {
-        const result = await cropsCollection.find().toArray();
-        res.send(result);
+        const {
+      search = "",
+      category = "",
+      location = "",
+      page = 1,
+      limit = 10
+    } = req.query;
+
+        const filter = {};
+        
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { type: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } }
+      ];
+        }
+        
+         // Category filter
+    if (category) {
+      filter.type = category;
+    }
+
+    // Location filter
+    if (location) {
+      filter.location = location;
+    }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const totalCrops = await cropsCollection.countDocuments(filter);
+        
+        const crops = await cropsCollection
+      .find(filter)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+
+        const totalPages = Math.ceil(totalCrops / parseInt(limit));
+
+            res.send({
+      success: true,
+      data: crops,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalCrops,
+        limit: parseInt(limit),
+        hasNextPage: parseInt(page) < totalPages,
+        hasPrevPage: parseInt(page) > 1
+      }
+    });
+
+        
       } catch (err) {
         res.status(500).send({ success: false, message: err.message });
       }
@@ -71,7 +124,7 @@ async function run() {
       }
     });
 
-   // get- for my post- crops by owner email
+    // get- for my post- crops by owner email
     app.get("/my-crops/:email", async (req, res) => {
       try {
         const { email } = req.params;
@@ -93,8 +146,7 @@ async function run() {
       }
     });
 
-
- //get- for myInterest- interests by user email
+    //get- for myInterest- interests by user email
     app.get("/my-interests/:email", async (req, res) => {
       try {
         const { email } = req.params;
@@ -135,7 +187,6 @@ async function run() {
       }
     });
 
-
     // add crops
     app.post("/add-crop", async (req, res) => {
       try {
@@ -158,7 +209,6 @@ async function run() {
         });
       }
     });
-
 
     // post - new interest
     app.post("/crops/:cropId/interests", async (req, res) => {
@@ -203,7 +253,6 @@ async function run() {
         });
       }
     });
-
 
     // put - update interest status
     app.put("/crops/:cropId/interests/:interestId", async (req, res) => {
@@ -253,6 +302,41 @@ async function run() {
       }
     });
 
+    // update only quantity
+    app.put("/crops/:id/quantity", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { quantity } = req.body;
+
+        console.log("Updating quantity:", { id, quantity });
+
+        const result = await cropsCollection.updateOne(
+          { _id: id },
+          {
+            $set: { quantity: quantity },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: "Crop not found",
+          });
+        }
+
+        res.send({
+          success: true,
+          message: "Quantity updated successfully",
+          result,
+        });
+      } catch (error) {
+        console.error("Error updating quantity:", error);
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
+    });
 
     // put - update entire crop
     app.put("/crops/:id", async (req, res) => {
@@ -289,7 +373,7 @@ async function run() {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
