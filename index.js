@@ -3,7 +3,7 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -227,134 +227,100 @@ async function run() {
       }
     });
 
-    app.post('/interests', async (req, res) => {
-      try {
-        const interestData = req.body;
-        const result = await interestsCollection.insertOne(interestData);
-        res.send({
-          success: true,
-          message: "Interest added successfully",
-          result,
-        });
-      } catch (err) {
-        console.error("Error adding interest:", err);
-        res.status(500).send({
-          success: false,
-          message: err.message,
-        });
-      }
-    });
 
-     // post - new interest
-    // app.post("/crops/:cropId/interests", async (req, res) => {
-    //   const { cropId } = req.params;
-    //   const { userEmail, userName, quantity, message } = req.body;
 
-    //   try {
-    //     const interestObj = {
-    //       _id: new ObjectId().toString(),
-    //       cropId,
-    //       userEmail,
-    //       userName,
-    //       quantity: parseInt(quantity),
-    //       message,
-    //       status: "pending",
-    //     };
 
-    //     const result = await cropsCollection.updateOne(
-    //       { _id: cropId },
-    //       {
-    //         $push: {
-    //           interests: interestObj,
-    //         },
-    //       }
-    //     );
 
-    //     if (result.matchedCount === 0) {
-    //       return res.status(404).send({
-    //         success: false,
-    //         message: "Crop not found",
-    //       });
-    //     }
-    //     res.send({
-    //       success: true,
-    //       message: "Interest added successfully",
-    //       result,
-    //     });
-    //   } catch (err) {
-    //     res.status(500).send({
-    //       success: false,
-    //       message: err.message,
-    //     });
-    //   }
-    // });
+app.post("/interests", async (req, res) => {
+  try {
+    const interestData = req.body;
+    const { cropId, userEmail } = interestData;
 
-    app.get("/interests/:cropId", async (req, res) => {
+  
+    const crop = await cropsCollection.findOne({ _id: cropId });
+    if (!crop) {
+      return res.status(400).send({ success: false, message: "Invalid cropId" });
+    }
+
     
+    const alreadyInterested = crop.interests?.some(
+      (interest) => interest.userEmail === userEmail
+    );
 
-      try {
-          const { cropId } = req.params;
-           
-    
-    const interests = await interestsCollection
-      .find({ cropId })
-      .sort({ _id: -1 })
-      .toArray();
-    
+    if (alreadyInterested) {
+      return res.status(400).send({
+        success: false,
+        message: "You have already expressed interest for this crop",
+      });
+    }
+
+    const newInterest = {
+      ...interestData,
+      status: "pending",
+      createdAt: new Date(),
+    };
+
+    await cropsCollection.updateOne(
+      { _id: cropId },
+      { $push: { interests: newInterest } }
+    );
+
     res.send({
       success: true,
-      data: interests
+      message: "Interest added successfully",
+      interest: newInterest,
     });
+  } catch (err) {
+    console.error("Error adding interest:", err);
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
 
 
-      } catch (err) {
-        console.error("Error fetching interests:", err);
-        res.status(500).send({
-          success: false,
-          message: err.message,
-        });
+app.get("/interests/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    const myInterests = await interestsCollection.aggregate([
+      { $match: { userEmail: email } },
+      {
+        $lookup: {
+          from: "crops",
+          localField: "cropId",
+          foreignField: "_id",
+          as: "cropInfo"
+        }
+      },
+      { $unwind: "$cropInfo" },
+      {
+        $project: {
+          _id: 1,
+          cropId: 1,
+          userEmail: 1,
+          userName: 1,
+          quantity: 1,
+          message: 1,
+          status: 1,
+          cropName: "$cropInfo.name",
+          cropImage: "$cropInfo.image",
+          unit: "$cropInfo.unit",
+          ownerName: "$cropInfo.owner.ownerName",
+          ownerEmail: "$cropInfo.owner.ownerEmail"
+        }
       }
-    });
+    ]).toArray();
 
-    // app.get("/my-interests/:email", async (req, res) => {
-    //   try {
-    //     const { email } = req.params;
+    res.send({ success: true, data: myInterests });
+  } catch (err) {
+    console.error("Error fetching my interests:", err);
+    res.status(500).send({ success: false, message: err.message });
+  }
+});
 
-    //     const allCrops = await cropsCollection.find().toArray();
 
-    //     const myInterests = [];
-
-    //     allCrops.forEach((crop) => {
-    //       if (crop.interests && crop.interests.length > 0) {
-    //         crop.interests.forEach((interest) => {
-    //           if (interest.userEmail === email) {
-    //             myInterests.push({
-    //               ...interest,
-    //               cropId: crop._id,
-    //               cropName: crop.name,
-    //               cropImage: crop.image,
-    //               ownerName: crop.owner.ownerName,
-    //               ownerEmail: crop.owner.ownerEmail,
-    //               ownerEmail: crop.owner.ownerEmail,
-    //               unit: crop.unit,
-    //             });
-    //           }
-    //         });
-    //       }
-    //     });
-
-    //     res.send({
-    //       success: true,
-    //       result: myInterests,
-    //     });
-    //   } catch (err) {
-    //     console.error("Error fetching my interests:", err);
-    //     res.status(500).send({
-    //       success: false,
-    //       message: err.message,
-    //     });
-    //   }
-    // });
 
     // add crops
     
@@ -513,11 +479,11 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("API is running...");
 });
 
 
-module.exports = app;
+// module.exports = app;
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
